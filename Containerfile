@@ -4,6 +4,14 @@
 #   Build:  podman build -t coalton-mine .
 #   Run:    podman run --rm -it coalton-mine
 #
+# Pin the SBCL and Coalton versions to clone via build args (each is a git
+# tag or branch). Defaults track the upstream tip:
+#
+#   podman build -t coalton-mine \
+#       --build-arg SBCL_VERSION=sbcl-2.5.11 \
+#       --build-arg COALTON_VERSION=main \
+#       .
+#
 # mine is a full-screen TUI, so it MUST be run with an interactive terminal
 # (`-it`). Mount a host directory if you want your projects/config to persist:
 #
@@ -55,9 +63,15 @@ ENV LANG=en_US.UTF-8 \
 # --with-sb-core-compression (zstd). Installs to /usr/local, which precedes
 # /usr/bin on PATH, so `sbcl` resolves to this build. Then drop the Debian
 # bootstrap sbcl to avoid confusion.
-RUN git clone --depth 1 https://github.com/sbcl/sbcl.git /tmp/sbcl \
+#
+# SBCL_VERSION is the git tag (e.g. sbcl-2.5.11) or branch (e.g. master) to
+# build. A shallow clone of a tag lets make.sh derive the version via
+# `git describe`; for a plain branch (no tags in shallow history) we fall
+# back to a synthetic version.lisp-expr so make.sh doesn't abort.
+ARG SBCL_VERSION=master
+RUN git clone --depth 1 --branch "${SBCL_VERSION}" https://github.com/sbcl/sbcl.git /tmp/sbcl \
     && cd /tmp/sbcl \
-    && echo '"2.5.11"' > version.lisp-expr \
+    && { git describe --tags >/dev/null 2>&1 || echo '"2.5.11"' > version.lisp-expr; } \
     && sh make.sh --fancy --with-sb-core-compression \
          --xc-host='sbcl --no-userinit --no-sysinit --disable-debugger' \
     && sh install.sh \
@@ -83,9 +97,11 @@ RUN curl -fsSL https://beta.quicklisp.org/quicklisp.lisp -o /tmp/quicklisp.lisp 
     && rm -f /tmp/quicklisp.lisp
 
 # ---- Source ---------------------------------------------------------------
-# Clone the coalton repo; mine builds from source via the repo-local source
-# registry (CL_SOURCE_REGISTRY pointing at the repo root, as in the Makefile).
-RUN git clone --depth 1 https://github.com/coalton-lang/coalton.git \
+# Clone the coalton repo (which contains mine/); it builds from source via the
+# repo-local source registry (CL_SOURCE_REGISTRY pointing at the repo root, as
+# in the Makefile). COALTON_VERSION is the git tag or branch to clone.
+ARG COALTON_VERSION=main
+RUN git clone --depth 1 --branch "${COALTON_VERSION}" https://github.com/coalton-lang/coalton.git \
         /home/coalton/coalton
 
 WORKDIR /home/coalton/coalton/mine
