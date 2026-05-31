@@ -1,0 +1,75 @@
+name: Publish image
+
+# Publishes the coalton "mine" image to the GitHub Container Registry (GHCR):
+#   * every push to the default branch  -> the `latest` tag
+#   * every pushed git tag              -> a matching version tag (+ semver)
+#
+# SBCL_VERSION / COALTON_VERSION build args are read from build.ini.
+
+on:
+  push:
+    branches: [master]
+    tags: ['*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # e.g. wildcommitter/coalton-mine-podman
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read build args from build.ini
+        id: ini
+        run: |
+          sbcl=$(sed -n 's/^[[:space:]]*SBCL_VERSION[[:space:]]*=[[:space:]]*//p' build.ini | head -1)
+          coalton=$(sed -n 's/^[[:space:]]*COALTON_VERSION[[:space:]]*=[[:space:]]*//p' build.ini | head -1)
+          : "${sbcl:?SBCL_VERSION not found in build.ini}"
+          : "${coalton:?COALTON_VERSION not found in build.ini}"
+          echo "sbcl_version=$sbcl"       >> "$GITHUB_OUTPUT"
+          echo "coalton_version=$coalton" >> "$GITHUB_OUTPUT"
+          echo "Using SBCL_VERSION=$sbcl COALTON_VERSION=$coalton"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Containerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SBCL_VERSION=${{ steps.ini.outputs.sbcl_version }}
+            COALTON_VERSION=${{ steps.ini.outputs.coalton_version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
