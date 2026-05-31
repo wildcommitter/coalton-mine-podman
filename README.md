@@ -71,7 +71,7 @@ create are owned by you on the host:
 ```sh
 podman run --rm -it --userns=keep-id \
     -v "$PWD:/home/dev" \
-    localhost/coalton-mine
+    ghcr.io/wildcommitter/coalton-mine-podman:latest
 ```
 
 Inside the IDE, use **Ctrl+o** to open files under `/home/dev`. Don't mount over
@@ -87,7 +87,7 @@ A convenient zsh function (mount the given dir, defaulting to the current one):
 mine() {
   podman run --rm -it --userns=keep-id \
     -v "${1:-$PWD}:/home/dev" \
-    localhost/coalton-mine "${@:2}"
+    ghcr.io/wildcommitter/coalton-mine-podman:latest "${@:2}"
 }
 ```
 

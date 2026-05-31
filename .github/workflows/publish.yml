@@ -10,6 +10,10 @@ on:
   push:
     branches: [master]
     tags: ['*']
+    # Skip rebuilds for docs-only changes. NB: this also applies to tag
+    # pushes, so cut release tags on commits that touch more than docs.
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 env:
