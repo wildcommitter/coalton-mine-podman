@@ -60,15 +60,40 @@ podman run --rm -it coalton-mine --best-effort
 
 Any trailing arguments after the image name are passed straight to the `mine` binary (e.g. `--best-effort`, `--setup`).
 
-### Persisting your work
+### Editing host files
 
-Mount a host directory so your projects and config survive container removal:
+To edit files from your machine inside `mine`, bind-mount a directory **and** add
+`--userns=keep-id`. With rootless podman a plain `-v` mount makes your files show up
+under an unmapped UID (effectively read-only); `--userns=keep-id` maps your host user
+to the container's `coalton` user (uid 1000) so the mount is read-write and files you
+create are owned by you on the host:
 
 ```sh
-podman run --rm -it \
-    -v "$PWD/work:/home/coalton/work:Z" \
-    coalton-mine
+podman run --rm -it --userns=keep-id \
+    -v "$PWD:/home/dev" \
+    localhost/coalton-mine
 ```
+
+Inside the IDE, use **Ctrl+o** to open files under `/home/dev`. Don't mount over
+`/home/coalton` — that would shadow the `mine` binary and Quicklisp and break the
+container; `mine` keeps its own config and cache there.
+
+A convenient zsh function (mount the given dir, defaulting to the current one):
+
+```zsh
+# Usage: mine [dir] [mine-args...]
+#   mine ~/projects/foo     # open that dir
+#   mine . --best-effort    # current dir, skip the kitty-keyboard check
+mine() {
+  podman run --rm -it --userns=keep-id \
+    -v "${1:-$PWD}:/home/dev" \
+    localhost/coalton-mine "${@:2}"
+}
+```
+
+To persist `mine`'s own config across `--rm` runs, also bind a host file onto
+`~/.mine`, e.g. `-v "$HOME/.config/mine/dotmine:/home/coalton/.mine"`, and set
+`:project-roots "/home/dev"` in it so mounted folders auto-populate the project tree.
 
 ## License
 
